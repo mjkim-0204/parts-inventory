@@ -1,0 +1,13 @@
+{
+  "name": "Pre-Write Code Review",
+  "version": "1.0.0",
+  "description": "파일을 쓰기 전에 코딩 표준 준수 여부를 스스로 검토합니다.",
+  "when": {
+    "type": "preToolUse",
+    "toolTypes": ["write"]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "이 파일 수정이 코딩 컨벤션(네이밍, 단일 책임, 에러 처리)을 지키는지 간단히 확인하고, 문제 없으면 바로 진행해."
+  }
+}

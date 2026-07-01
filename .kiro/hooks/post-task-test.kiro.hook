@@ -1,0 +1,12 @@
+{
+  "name": "Post Task Test Run",
+  "version": "1.0.0",
+  "description": "Spec task가 완료되면 자동으로 에이전트에게 테스트/검증을 요청합니다.",
+  "when": {
+    "type": "postTaskExecution"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "방금 완료한 task의 구현 결과를 검증해. 코드가 정상 동작하는지 확인하고, 에러가 있으면 바로 수정해."
+  }
+}
