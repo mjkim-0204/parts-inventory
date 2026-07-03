@@ -22,10 +22,17 @@
 - **Part_Code**: 부품을 고유하게 식별하는 코드 (현행: KS-[브랜드]-[순번])
 - **Bulk_Import**: 외부 데이터 소스(구글 시트/CSV)에서 다량의 부품 데이터를 일괄 가져오는 기능
 - **Column_Mapping**: 구글 시트 헤더(첫 행)의 컬럼명을 시스템 필드에 자동 대응시키는 매핑
-- **Operator**: 시스템을 사용하는 매장 운영자 또는 AS 엔지니어
+- **Operator**: 전체 재고, 발주, AS가이드, 설정을 관리할 수 있는 Role을 가진 매장 운영자 (Requirement 1~11에서 지칭하는 기본 사용자)
 - **Google_Sheet**: 부품 데이터가 저장된 외부 구글 스프레드시트
 - **Minimum_Stock**: 부품별 설정된 최소 재고 수량 (이하로 떨어지면 경고)
 - **Navigation_Tab**: 앱 하단 또는 상단에 위치한 주요 기능 탭 (도감, 재고, AS가이드, 대시보드)
+- **Lot**: 동일 부품이 한 번에 입고된 묶음. 입고일과 수량을 가지며, 선입선출 판단의 기준 단위
+- **FIFO_Order**: 동일 Part의 여러 Lot 중 입고일이 가장 오래된 순서로 출고를 권장하는 규칙
+- **Purchase_Order_Draft**: Minimum_Stock 미달 Part를 모아 자동 생성되는 발주 항목 목록 (부품명, 필요수량, 거래처 정보 포함)
+- **Role**: 시스템 사용자에게 부여되는 권한 등급. Worker(작업자) 또는 Operator(운영자)
+- **Worker**: 현장에서 자신의 Worker_Vehicle 반출/반납만 수행할 수 있는 Role
+- **Auth_Session**: Google 계정 기반 로그인으로 생성되는 사용자 인증 세션
+- **Slack_Webhook**: 재고 부족/발주 필요 상황을 Slack 채널로 전달하는 Apps Script 연동 알림 채널
 
 ---
 
@@ -212,3 +219,77 @@
 5. THE Inventory_System SHALL provide a filter to view dashboard metrics by brand (우방, 다뉴브, IT, 공용, 자판기, 서비스), and WHEN a brand filter is selected, THE Inventory_System SHALL recalculate all displayed metrics to reflect only parts belonging to the selected brand.
 6. THE Inventory_System SHALL calculate and display the total inventory value (sum of 실행가 × current stock quantity for each part) and potential billing value (sum of 청구가 × current stock quantity for each part).
 7. THE Inventory_System SHALL display a "반출 현황" section showing: total workers with checked-out parts, total checked-out Part types, and a list of workers sorted by checked-out quantity in descending order.
+
+---
+
+### Requirement 12: 로트 단위 재고 및 선입선출(FIFO)
+
+**User Story:** As an Operator, I want each stock-in event recorded as a separate Lot with its received date, so that I know which batch of a Part to use first and avoid holding old stock indefinitely.
+
+#### Acceptance Criteria
+
+1. WHEN an Operator records a stock-in (입고) for a Part, THE Inventory_System SHALL create a new Lot record containing: Part_Code, received date (ISO 8601), quantity, and Location, rather than only incrementing a single total quantity field.
+2. THE Inventory_System SHALL calculate a Part's total Stock_Record quantity as the sum of the quantities of all active (non-zero) Lots for that Part across all Locations.
+3. WHEN an Operator views a Part's detail in the 재고 tab, THE Inventory_System SHALL display all active Lots for that Part sorted by received date ascending (oldest first), each showing received date, quantity, and Location.
+4. WHEN an Operator records a stock-out (출고, checkout, or return-to-warehouse-then-reissue), THE Inventory_System SHALL default the suggested source Lot to the oldest active Lot at the relevant Location (FIFO_Order) and allow the Operator to override the selected Lot with a confirmation step.
+5. WHEN a Lot's quantity is reduced to 0, THE Inventory_System SHALL mark the Lot as depleted and exclude it from the active Lot list while retaining it in transaction history.
+6. THE Inventory_System SHALL display a Part-level indicator (e.g., "가장 오래된 재고: N일 경과") based on the oldest active Lot's received date, visible on the Part's inventory detail view.
+7. THE Inventory_System SHALL support migrating existing single-quantity Stock_Records to a single initial Lot dated at migration time, so that no Part is left without at least one Lot after the FIFO feature is enabled.
+8. IF an Operator attempts to select a Lot with insufficient quantity for a requested stock-out amount, THEN THE Inventory_System SHALL either split the request across multiple Lots in FIFO_Order automatically or reject the transaction with a message indicating available quantity per Lot, per Operator-configured preference.
+
+---
+
+### Requirement 13: 발주서 초안 생성 (Purchase Order Draft)
+
+**User Story:** As an Operator, I want the system to generate a draft purchase order listing all parts below minimum stock with suggested order quantities, so that I can quickly send an order to suppliers without manually compiling the list.
+
+#### Acceptance Criteria
+
+1. THE Inventory_System SHALL maintain, for each Part, an optional 거래처(supplier) field (free-text, maximum 50 characters) and an optional 리드타임(lead time in days, integer 0–365).
+2. THE Inventory_System SHALL provide a "발주서 생성" action in the 재고 or 대시보드 tab that collects all Parts with current total Stock_Record quantity at or below Minimum_Stock.
+3. WHEN an Operator generates a Purchase_Order_Draft, THE Inventory_System SHALL calculate a suggested order quantity per Part as (Minimum_Stock × 2 − current quantity), with a floor of 1, and SHALL allow the Operator to manually adjust each suggested quantity before finalizing.
+4. THE Inventory_System SHALL group the Purchase_Order_Draft by 거래처, listing Parts with no 거래처 assigned in a separate "거래처 미지정" group.
+5. WHEN an Operator finalizes a Purchase_Order_Draft, THE Inventory_System SHALL export it as a new sheet/tab in the linked Google_Sheet (or a downloadable CSV) containing: Part name, Part_Code, 거래처, suggested quantity, and current quantity, and SHALL record the draft generation event with an ISO 8601 timestamp.
+6. THE Inventory_System SHALL retain a history of the last 20 generated Purchase_Order_Drafts, viewable by an Operator, showing generation date and included Part count.
+
+---
+
+### Requirement 14: 인증 및 호스팅 전환 (Apps Script 웹앱)
+
+**User Story:** As an Operator, I want the system to require a company Google account login before showing any inventory or pricing data, so that real operational data is not exposed to the public the way a static HTML page would be.
+
+#### Acceptance Criteria
+
+1. THE Inventory_System SHALL be deployed as a Google Apps Script web app restricted to users within the organization's Google Workspace domain, rather than as a publicly accessible static page.
+2. WHEN a user without a valid organization Google account attempts to access the Inventory_System, THE Inventory_System SHALL deny access and display a message indicating that only organization accounts are permitted.
+3. THE Inventory_System SHALL establish an Auth_Session upon successful Google login and SHALL associate all subsequent stock adjustments, checkouts, returns, and transaction log entries with the authenticated user's identity.
+4. THE Inventory_System SHALL retain existing localStorage caching behavior for offline resilience while treating the Apps Script web app as the authoritative data source once connectivity is available.
+5. IF the migration from GitHub Pages to Apps Script web app is in progress, THEN THE Inventory_System SHALL keep the legacy static page accessible only to Administrators for verification purposes until the Apps Script deployment is confirmed stable, after which the legacy page SHALL be taken down.
+
+---
+
+### Requirement 15: 작업자/운영자 권한 분리 (Role-Based Access)
+
+**User Story:** As an Operator, I want field workers to only be able to check out or return parts from their own vehicle, so that they cannot accidentally or intentionally modify other workers' inventory, warehouse stock, or system settings.
+
+#### Acceptance Criteria
+
+1. THE Inventory_System SHALL assign each Auth_Session a Role of either Worker or Operator, determined by a role assignment list maintained by an Operator.
+2. WHEN a user with the Worker Role logs in, THE Inventory_System SHALL restrict visible actions to: Checkout and Return involving only that Worker's own Worker_Vehicle, and read-only viewing of Part catalog, AS_Guide, and their own transaction history.
+3. IF a user with the Worker Role attempts to perform an action outside their permitted scope (e.g., adjusting another worker's vehicle stock, editing Minimum_Stock, deleting a Worker_Profile, generating a Purchase_Order_Draft), THEN THE Inventory_System SHALL reject the action and display a message indicating insufficient permissions.
+4. THE Inventory_System SHALL allow only users with the Operator Role to access: 대시보드 tab, Purchase_Order_Draft generation, Worker_Profile management, Error_Code-to-Parts mapping edits, and Bulk_Import.
+5. THE Inventory_System SHALL provide an Operator-only settings view for assigning or changing a user's Role, and SHALL require at least one Operator to remain in the system at all times (rejecting a change that would leave zero Operators).
+
+---
+
+### Requirement 16: Slack 알림 연동
+
+**User Story:** As an Operator, I want low-stock and reorder-needed situations to be pushed to a Slack channel automatically, so that I don't have to keep the app open to notice a problem.
+
+#### Acceptance Criteria
+
+1. THE Inventory_System SHALL support configuring a Slack_Webhook URL via an Operator-only settings view.
+2. WHEN a Part's Stock_Record quantity falls to or below its Minimum_Stock threshold, THE Inventory_System SHALL send a Slack notification via the configured Slack_Webhook containing: Part name, Part_Code, current quantity, and Minimum_Stock, within 5 minutes of the triggering stock change.
+3. THE Inventory_System SHALL batch multiple low-stock triggers occurring within the same 5-minute window into a single Slack message rather than sending one message per Part.
+4. WHEN a Purchase_Order_Draft is generated, THE Inventory_System SHALL send a Slack notification summarizing the number of Parts included and a link to the generated sheet/CSV.
+5. IF the Slack_Webhook call fails, THEN THE Inventory_System SHALL log the failure, retry up to 3 times with backoff, and, if all retries fail, display a sync-style warning indicator in the app (consistent with Requirement 10's sync failure handling) without blocking the underlying stock or purchase-order operation.
