@@ -33,6 +33,10 @@
 - **Worker**: 현장에서 자신의 Worker_Vehicle 반출/반납만 수행할 수 있는 Role
 - **Auth_Session**: Google 계정 기반 로그인으로 생성되는 사용자 인증 세션
 - **Slack_Webhook**: 재고 부족/발주 필요 상황을 Slack 채널로 전달하는 Apps Script 연동 알림 채널
+- **Scan_Kiosk**: 메인 창고에 고정 배치된 태블릿/PC 화면으로, Wireless_Scanner와 연동되어 반출·반납·입고를 스캔으로 기록하는 화면
+- **Wireless_Scanner**: 블루투스 HID(키보드 에뮬레이션) 모드로 Scan_Kiosk에 연결되는 무선 2D 바코드/QR 스캐너
+- **Part_QR_Label**: Part마다 발급되는 QR코드 라벨(부품 사진+이름 포함), 창고 선반/보관함에 부착되어 스캔 대상이 됨
+- **Cart_Session**: Scan_Kiosk에서 스캔 시작부터 확정 전까지 임시로 누적되는 반출/반납/입고 항목 리스트
 
 ---
 
@@ -293,3 +297,22 @@
 3. THE Inventory_System SHALL batch multiple low-stock triggers occurring within the same 5-minute window into a single Slack message rather than sending one message per Part.
 4. WHEN a Purchase_Order_Draft is generated, THE Inventory_System SHALL send a Slack notification summarizing the number of Parts included and a link to the generated sheet/CSV.
 5. IF the Slack_Webhook call fails, THEN THE Inventory_System SHALL log the failure, retry up to 3 times with backoff, and, if all retries fail, display a sync-style warning indicator in the app (consistent with Requirement 10's sync failure handling) without blocking the underlying stock or purchase-order operation.
+
+---
+
+### Requirement 17: 반출 스캔 키오스크 (QR/바코드)
+
+**User Story:** As an Operator, I want a dedicated scan-based kiosk screen at the main warehouse where any field worker can quickly scan parts in or out using a wireless barcode/QR scanner, so that checkout/return/stock-in events are captured accurately without the manual data entry that currently gets skipped under time pressure.
+
+#### Acceptance Criteria
+
+1. THE Inventory_System SHALL provide a Scan_Kiosk view, intended to run on a tablet or PC placed at the Fixed_Warehouse, that accepts input from a Wireless_Scanner connected via Bluetooth HID mode (scanned codes arrive as text input, requiring no dedicated pairing software or camera access).
+2. WHEN the Scan_Kiosk view is opened, THE Inventory_System SHALL require selecting one of three modes — 반출(Checkout), 반납(Return), 입고(Stock-in) — before any scan is processed, and SHALL display the currently selected mode prominently at all times until changed.
+3. WHEN in 반출 or 반납 mode, THE Inventory_System SHALL require selecting a Worker from a list of registered Worker_Profiles, presented as tappable name buttons, before scanning is enabled; THE Inventory_System SHALL NOT require a separate per-worker login for this selection — it serves only as attribution for the resulting transaction, distinct from the Scan_Kiosk device's own Auth_Session under Requirement 14.
+4. THE Inventory_System SHALL maintain a Part_QR_Label for each Part, generated from that Part's existing code, name, and photo, and SHALL provide a function to print all Part_QR_Labels as an A4 grid sheet for batch printing and physical attachment to warehouse bins or shelf slots.
+5. WHEN a Wireless_Scanner scan is received in the Scan_Kiosk view, THE Inventory_System SHALL match the scanned code to a Part_QR_Label and add the corresponding Part to the current Cart_Session with a default quantity of 1; scanning the same code again within the same Cart_Session SHALL increment that Part's quantity by 1 instead of adding a duplicate line.
+6. THE Inventory_System SHALL allow manually adjusting or removing a Part's quantity within the current Cart_Session before confirming, and SHALL provide a manual search-and-add option (by Part name or Part_Code) as a fallback for when a Part_QR_Label is missing, damaged, or not yet printed.
+7. WHEN the Cart_Session is confirmed, THE Inventory_System SHALL process every listed Part according to the selected mode: 반출 (deduct from the oldest active Lot at the Fixed_Warehouse per Requirement 12's FIFO_Order and assign the deducted quantity to the selected Worker's Worker_Vehicle), 반납 (create a new Lot at the Fixed_Warehouse and remove the returned quantity from the Worker's Worker_Vehicle holdings), or 입고 (create a new Lot at the Fixed_Warehouse dated at confirmation time) — and SHALL record each resulting transaction per Requirement 3 and Requirement 10.
+8. IF the Scan_Kiosk device loses network connectivity while a Cart_Session is open or during confirmation, THEN THE Inventory_System SHALL retain the Cart_Session and any confirmed-but-unsynced transactions in local storage and sync automatically once connectivity is restored, consistent with Requirement 10's sync queue behavior.
+9. IF an open Cart_Session is left unconfirmed (e.g., the Scan_Kiosk view is closed or navigated away), THEN THE Inventory_System SHALL preserve it in local storage and restore it the next time the Scan_Kiosk view is opened, prompting the Operator or Worker to resume or discard it.
+10. THE Inventory_System SHALL support pairing exactly one Wireless_Scanner per Scan_Kiosk device at a time and SHALL display a clear indicator when no Wireless_Scanner input has been received for longer than the expected pairing timeout, prompting the Operator to check the scanner's connection or battery.
