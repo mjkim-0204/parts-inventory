@@ -1,5 +1,26 @@
 # Vibe Log — Parts Inventory
 
+## 📋 핸드오프 체크리스트 (2026-07-06, Claude Code → Kiro 이관용)
+
+**폴더/GitHub에 있음 (그대로 따라감)**
+- `.kiro/specs/inventory-management-enhancement/requirements.md` — Req 1~17
+- `vibe-log.md` — 전체 세션 기록 (이 파일)
+- `.claude/settings.json`, `.mcp.json`, `.gitignore`, `.claude/launch.json` (Claude Code 전용 설정)
+- `재고관리_확장_진행현황_2026-07-06.pptx` — 발표자료 8장
+- GitHub 브랜치 `spec/inventory-fifo-reorder-security-hook`, [PR #1](https://github.com/mjkim-0204/parts-inventory/pull/1)
+- `gh` CLI 설치·인증 완료 (계정 mjkim-0204)
+
+**노션에 있음 (링크로 접근)**
+- 메인 페이지: [2026-07-06 재고관리 확장 프로젝트 진행현황](https://app.notion.com/p/39545d3bbf9a81bca415c2de05f26f1a) — 큰그림/Phase1~5/전체흐름표/대안비교표/프로토타입 목업 2개(라이브 임베드) 포함
+- 파킹 아이디어: [💡 카메라+AI 자동인식 재고시스템(라즈베리파이)](https://app.notion.com/p/39545d3bbf9a811db659f43e530efba1)
+
+**이 대화에서만 존재 (파일로 안 남음)**
+- 다글로용 PPT 텍스트 브리프 (복사용 텍스트, 필요시 파일로 저장 요청)
+- SENSCAN 스캐너 추천, 와이파이 옵션 등 세부 논의 뉘앙스 (결론은 위 문서들에 반영됨)
+
+**Claude 개인 메모리 (Kiro로 안 따라감)**
+- `parts_inventory_scope.md`, `parts_inventory_security.md` — 핵심 내용은 이미 vibe-log에 복제됨
+
 ---
 
 ## 2026-07-03 | 재고관리 확장 Spec 보강 (발주/FIFO/권한/알림)
