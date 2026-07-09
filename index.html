@@ -132,16 +132,39 @@ function esc(s){if(!s)return'';return String(s).replace(/&/g,'&amp;').replace(/<
 function loadRelations(){const s=localStorage.getItem('pokedex_relations');if(s){const parsed=safeParse(s,null);if(parsed)return parsed;}localStorage.setItem('pokedex_relations',JSON.stringify(DEFAULT_RELATIONS));return[...DEFAULT_RELATIONS];}
 function saveRelations(r){localStorage.setItem('pokedex_relations',JSON.stringify(r));}
 function getPhotos(id){
-  // 신규: 배열로 저장. 구버전 단일 'photo_' 호환 마이그레이션.
+  // photos_ID에 URL 배열 저장 (Drive URL 또는 레거시 Base64)
   const arr=localStorage.getItem('photos_'+id);
   if(arr){const parsed=safeParse(arr,null);if(parsed)return parsed;}
   const old=localStorage.getItem('photo_'+id);
-  if(old){const a=[old];localStorage.setItem('photos_'+id,JSON.stringify(a));return a;}
+  if(old){const a=[old];localStorage.setItem('photos_'+id,JSON.stringify(a));localStorage.removeItem('photo_'+id);return a;}
   return [];
 }
 function setPhotos(id,arr){localStorage.setItem('photos_'+id,JSON.stringify(arr));}
 function getPhoto(id){const a=getPhotos(id);return a.length?a[0]:'';} // 대표사진
 function setPhoto(id,d){const a=getPhotos(id);a.unshift(d);setPhotos(id,a);}
+// Base64인지 URL인지 판별
+function isBase64(str){return str&&str.startsWith('data:');}
+// 로컬 Base64 사진을 드라이브로 이전 (설정 탭에서 수동 실행)
+async function migratePhotosToUrls(){
+  const s=getSettings();
+  if(!s.scriptUrl||!s.driveFolder){toast('설정에서 Script URL과 드라이브 폴더 ID 먼저 입력');return;}
+  let migrated=0,failed=0;
+  for(const part of PARTS){
+    const photos=getPhotos(part.id);
+    let changed=false;
+    for(let i=0;i<photos.length;i++){
+      if(!isBase64(photos[i])) continue; // 이미 URL이면 스킵
+      try{
+        const res=await fetch(s.scriptUrl,{method:'POST',body:JSON.stringify({action:'uploadPhoto',partId:part.id,folderId:s.driveFolder,imageData:photos[i],secret:s.apiSecret||''})});
+        const r=await res.json();
+        if(r.ok&&r.url){photos[i]=r.url;changed=true;migrated++;}
+        else {failed++;console.warn('이전 실패:',part.id,r.error);}
+      }catch(e){failed++;console.error('이전 오류:',part.id,e);}
+    }
+    if(changed) setPhotos(part.id,photos);
+  }
+  toast(`사진 이전 완료: ${migrated}장 성공${failed?', '+failed+'장 실패':''}`);
+}
 function getMemo(id){return localStorage.getItem('memo_'+id)||'';}
 function setMemo(id,v){localStorage.setItem('memo_'+id,v);}
 function getSettings(){const s=localStorage.getItem('pokedex_settings');if(s){const parsed=safeParse(s,null);if(parsed)return parsed;}return{scriptUrl:'',driveFolder:'',location:'낙성대점',apiSecret:''};}
@@ -708,6 +731,29 @@ function renderSettings(){
       <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">먼저 URL 입력 → 설정 저장 → 연결 테스트로 확인 → 전체 동기화</div>
     </div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px">
+      <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:10px">📷 사진 관리</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="migratePhotosToUrls()" style="padding:9px 16px;background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">🔄 로컬사진 → Drive 이전</button>
+        <button onclick="importPhotosFromDrive()" style="padding:9px 16px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">📥 Drive 사진 매칭 임포트</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">
+        • 로컬→Drive 이전: localStorage의 Base64 사진을 드라이브로 업로드하고 URL로 전환<br>
+        • Drive 매칭 임포트: 드라이브 폴더의 사진을 파일명 규칙(부품코드.jpg)으로 자동 매칭
+      </div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px">
+      <div style="font-size:13px;font-weight:700;color:var(--accent);margin-bottom:10px">💾 전체 백업 / 복원</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="exportFullBackup()" style="padding:9px 16px;background:transparent;color:var(--accent);border:1px solid var(--accent);border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">📤 전체 백업 (JSON)</button>
+        <button onclick="document.getElementById('backupInput').click()" style="padding:9px 16px;background:var(--accent);color:var(--bg);border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">📥 백업 복원</button>
+        <input type="file" id="backupInput" accept=".json" style="display:none" onchange="importFullBackup(this.files[0])">
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">
+        백업에 포함: 부품 목록, 메모, 관계도, 사진 URL, 설정<br>
+        ※ 복원 시 기존 데이터를 덮어씁니다
+      </div>
+    </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px">
       <div style="font-size:13px;font-weight:700;color:var(--accent2);margin-bottom:8px">⚠️ 데이터</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button onclick="if(confirm('초기화?')){localStorage.clear();PARTS=loadParts();RELATIONS=loadRelations();render();toast('초기화 완료');}" style="padding:8px 14px;background:var(--bg);color:var(--accent2);border:1px solid var(--accent2);border-radius:6px;font-size:12px;cursor:pointer">🗑 초기화</button>
@@ -795,20 +841,39 @@ function deletePart(id){
 }
 function handlePhotoUpload(input){
   if(!input.files||!input.files[0]||!currentPart)return;
+  const s=getSettings();
+  const hasDrive=s.scriptUrl&&s.driveFolder;
   const reader=new FileReader();
   reader.onload=function(e){
     const img=new Image();
-    img.onload=function(){
+    img.onload=async function(){
       const c=document.createElement('canvas');const maxW=IMAGE_MAX_WIDTH;
       let w=img.width,h=img.height;if(w>maxW){h=h*(maxW/w);w=maxW;}
       c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);
       const data=c.toDataURL('image/jpeg',IMAGE_QUALITY);
-      const arr=getPhotos(currentPart.id);
-      arr.push(data);            // 새 사진은 뒤에 추가 (대표는 첫번째 유지)
-      setPhotos(currentPart.id,arr);
-      uploadToDrive(currentPart.id,data);
-      addLog(currentPart.id,'사진',`사진 추가 (총 ${arr.length}장)`);
-      renderDetail();toast('사진 추가 ✓');
+      if(hasDrive){
+        // Drive URL only 모드: 업로드 후 URL만 저장
+        toast('Drive 업로드 중...');
+        try{
+          const res=await fetch(s.scriptUrl,{method:'POST',body:JSON.stringify({action:'uploadPhoto',partId:currentPart.id,folderId:s.driveFolder,imageData:data,secret:s.apiSecret||''})});
+          const r=await res.json();
+          if(r.ok&&r.url){
+            const arr=getPhotos(currentPart.id);
+            arr.push(r.url);
+            setPhotos(currentPart.id,arr);
+            setPartPhotoUrl(currentPart.id,r.url);
+            addLog(currentPart.id,'사진',`사진 추가 (총 ${arr.length}장, Drive)`);
+            renderDetail();toast('사진 추가 ✓ (Drive 저장)');
+          } else {toast('업로드 실패: '+(r.error||'알 수 없음'));}
+        }catch(err){toast('Drive 연결 실패: '+err.message);}
+      } else {
+        // 로컬 모드 (드라이브 미설정): Base64 저장 + 경고
+        const arr=getPhotos(currentPart.id);
+        arr.push(data);
+        setPhotos(currentPart.id,arr);
+        addLog(currentPart.id,'사진',`사진 추가 (총 ${arr.length}장, 로컬)`);
+        renderDetail();toast('⚠️ 로컬 저장됨 (설정에서 Drive 연결 권장)');
+      }
     };img.src=e.target.result;
   };reader.readAsDataURL(input.files[0]);
   input.value='';
@@ -885,6 +950,18 @@ async function removeBg(idx){
   if(!currentPart)return;
   const arr=getPhotos(currentPart.id);
   if(!arr[idx])return;
+  const s=getSettings();
+  const hasDrive=s.scriptUrl&&s.driveFolder;
+  // URL인 경우 먼저 이미지를 fetch해서 Base64로 변환
+  let srcData=arr[idx];
+  if(!isBase64(srcData)){
+    toast('누끼 따는 중... 이미지 로딩');
+    try{
+      const resp=await fetch(srcData);
+      const blob=await resp.blob();
+      srcData=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=rej;fr.readAsDataURL(blob);});
+    }catch(e){toast('이미지 로딩 실패: '+e.message);return;}
+  }
   toast('누끼 따는 중... 첫 사용 시 모델 다운로드(수십초)');
   try{
     if(!_bgRemovalLib){
@@ -892,12 +969,18 @@ async function removeBg(idx){
     }
     const fn=_bgRemovalLib.removeBackground||(_bgRemovalLib.default&&_bgRemovalLib.default.removeBackground);
     if(!fn) throw new Error('removeBackground 함수 없음');
-    const blob=await fn(arr[idx]);
+    const blob=await fn(srcData);
     let dataUrl=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=rej;fr.readAsDataURL(blob);});
-    dataUrl=await trimAndCenter(dataUrl); // 투명여백 자르고 가운데 정렬
-    arr[idx]=dataUrl;
+    dataUrl=await trimAndCenter(dataUrl);
+    if(hasDrive){
+      toast('누끼 Drive 업로드 중...');
+      const res=await fetch(s.scriptUrl,{method:'POST',body:JSON.stringify({action:'uploadPhoto',partId:currentPart.id+'_누끼',folderId:s.driveFolder,imageData:dataUrl,secret:s.apiSecret||''})});
+      const r=await res.json();
+      if(r.ok&&r.url){arr[idx]=r.url;} else {arr[idx]=dataUrl;} // 실패 시 로컬 저장
+    } else {
+      arr[idx]=dataUrl;
+    }
     setPhotos(currentPart.id,arr);
-    uploadToDrive(currentPart.id,dataUrl);
     addLog(currentPart.id,'사진','누끼 처리');
     renderDetail();toast('누끼 완료 ✓');
   }catch(err){
@@ -967,6 +1050,99 @@ async function testConnection(){
     else toast('응답은 왔으나 오류: '+(r.error||''));
   }catch(e){toast('연결 실패: '+e.message+' (배포 액세스 권한 "모든 사용자" 확인)');}
 }
+// ═══ 드라이브 사진 매칭 임포트 ═══
+// Apps Script에서 폴더 내 파일 목록을 가져와서 파일명 규칙으로 부품에 매칭
+async function importPhotosFromDrive(){
+  const s=getSettings();
+  if(!s.scriptUrl||!s.driveFolder){toast('설정에서 Script URL과 드라이브 폴더 ID 먼저 입력');return;}
+  toast('Drive 폴더 스캔 중...');
+  try{
+    const res=await fetch(s.scriptUrl,{method:'POST',body:JSON.stringify({action:'listPhotos',folderId:s.driveFolder,secret:s.apiSecret||''})});
+    const r=await res.json();
+    if(!r.ok){toast('스캔 실패: '+(r.error||''));return;}
+    const files=r.files||[];
+    if(!files.length){toast('폴더에 사진 없음');return;}
+    let matched=0;
+    // 파일명 규칙: 부품코드.jpg, 부품코드_순번.jpg, 부품코드_순번_누끼.png
+    files.forEach(f=>{
+      const name=f.name.replace(/\.(jpg|jpeg|png|webp)$/i,'');
+      const parts=name.split('_');
+      // 부품 코드 추출: KS-WB-01 또는 KS-WB-01 형태 (하이픈 포함)
+      let partId='';
+      // 파일명이 KS-XX-NN 패턴으로 시작하는지 확인
+      const idMatch=name.match(/^(KS-[A-Z]+-\d+|SV-[A-Z]+-\d+)/i);
+      if(idMatch) partId=idMatch[1].toUpperCase();
+      if(!partId) return;
+      const part=PARTS.find(p=>p.id===partId);
+      if(!part) return;
+      const url='https://drive.google.com/uc?export=view&id='+f.id;
+      const arr=getPhotos(partId);
+      // 중복 체크: 같은 URL이 이미 있으면 스킵
+      if(arr.includes(url)) return;
+      // _누끼 파일이면 기존 원본 뒤에 추가
+      arr.push(url);
+      setPhotos(partId,arr);
+      matched++;
+    });
+    toast(`사진 매칭 완료: ${matched}장 연결 (총 ${files.length}개 파일 스캔)`);
+    if(matched>0) render();
+  }catch(e){toast('Drive 연결 실패: '+e.message);}
+}
+
+// ═══ 전체 백업 / 복원 ═══
+function exportFullBackup(){
+  const backup={
+    version:'1.0',
+    exportedAt:new Date().toISOString(),
+    parts:PARTS,
+    relations:RELATIONS,
+    settings:getSettings(),
+    photos:{},
+    memos:{}
+  };
+  // 사진 URL과 메모 수집
+  PARTS.forEach(p=>{
+    const photos=getPhotos(p.id);
+    if(photos.length) backup.photos[p.id]=photos;
+    const memo=getMemo(p.id);
+    if(memo) backup.memos[p.id]=memo;
+  });
+  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='parts-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+  toast('백업 완료 ✓ ('+PARTS.length+'개 부품)');
+}
+function importFullBackup(file){
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const backup=JSON.parse(e.target.result);
+      if(!backup.parts||!Array.isArray(backup.parts)){toast('유효하지 않은 백업 파일');return;}
+      if(!confirm(`${backup.parts.length}개 부품 데이터를 복원합니다. 기존 데이터를 덮어씁니다. 계속할까요?`))return;
+      // 부품 복원
+      PARTS=backup.parts;
+      saveParts(PARTS);
+      // 관계 복원
+      if(backup.relations){RELATIONS=backup.relations;saveRelations(RELATIONS);}
+      // 설정 복원
+      if(backup.settings) saveSettingsData(backup.settings);
+      // 사진 복원
+      if(backup.photos){
+        Object.keys(backup.photos).forEach(id=>{setPhotos(id,backup.photos[id]);});
+      }
+      // 메모 복원
+      if(backup.memos){
+        Object.keys(backup.memos).forEach(id=>{setMemo(id,backup.memos[id]);});
+      }
+      toast(`복원 완료 ✓ (${PARTS.length}개 부품)`);
+      render();
+    }catch(err){toast('복원 실패: '+err.message);}
+  };reader.readAsText(file,'UTF-8');
+}
+
 function exportCSV(){
   const h='id,name,name_en,brand,group,device,price_exec,price_bill,sap,tags';
   const csvEsc=(v)=>'"'+String(v||'').replace(/"/g,'""')+'"';
