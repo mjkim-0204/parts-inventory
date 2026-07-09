@@ -23,6 +23,33 @@
 
 ---
 
+## 2026-07-09 | 보안 점검 교차 확인 (Claude ↔ Kiro)
+
+### 배경
+- Kiro로 저장소 정리(보안강화+버그수정+폴더구조 정리, `git reset`으로 커밋 히스토리도 깔끔하게 정리) 진행 후, Claude에게 다시 한번 보안 점검 요청
+- Claude가 `AppsScript_Code_v3.gs`, `index.html`, `SECURITY.md`, `.kiro/steering/security-checklist.md`를 직접 읽어서 점검
+
+### 확인된 것 (좋아진 부분)
+- `DRIVE_FOLDER_ID`/`SPREADSHEET_ID` 하드코딩 제거 → `PropertiesService`로 이동
+- `doPost`에 `secret` 파라미터 인증(`verifyAuth_`) 추가, index.html도 모든 POST 요청에 `secret` 동봉하도록 연동 완료
+- `AppsScript_Code_v3.gs`가 `.gitignore` 처리되어 앞으로 재노출 방지
+- XSS 이스케이프(`esc()`) 동적 값 전반 적용 확인
+
+### 발견된 구멍 → 즉시 수정
+- **`doGet`(`getParts`)에는 인증 검증이 빠져있었음** — POST만 막고 GET은 그대로 열려있어서, `?action=getParts`로 직접 접근하면 가격 데이터 포함 전체 DB가 인증 없이 조회 가능한 상태였음
+- Kiro가 즉시 수정: `doGet`에도 `doPost`와 동일한 패턴(`e.parameter.secret` 검증)으로 인증 로직 추가 → Claude가 재확인 완료 (✅ 정상 반영됨)
+
+### 남은 것 (Google 쪽이라 코드로 확인 불가, 사람이 직접 확인 필요)
+1. **`API_SECRET` 스크립트 속성 실제 설정 여부** — 아직 안 함
+2. **이 코드가 실제 라이브 Apps Script에 배포됐는지** — 아직 안 함 (드라이브 연결 자체를 아직 안 한 상태)
+
+→ 둘 다 "1단계: Apps Script 배포" 진행 시 한 번에 처리하기로 함. 그 전까지는 코드만 준비된 상태(로컬/저장소에는 반영됐지만 실제 서비스에는 미반영)임을 인지하고 있을 것.
+
+### 결론
+코드 레벨 보안 점검은 완료. 실제 배포(Apps Script 재배포 + API_SECRET 설정)만 하면 이번 보안 이슈는 마무리됨.
+
+---
+
 ## 2026-07-06 (회의 후) | 실제 팀 회의 결과 — 반출 기록 방식 변경 (개별 부품 단위 라벨)
 
 ### 배경

@@ -35,4 +35,5 @@
 ## 5. 참고 문서
 
 - 인증/권한 마이그레이션 계획: [`.kiro/specs/inventory-management-enhancement/requirements.md`](.kiro/specs/inventory-management-enhancement/requirements.md) Req 14, 15
-- 과거 사고 사례: 2026-07-07 Apps Script 배포 URL 평문 커밋 노출 (커밋 `9326dcb`) — 파일은 삭제했으나 재배포(URL 교체)는 미완료 상태
+- 과거 사고 사례: 2026-07-07 Apps Script 배포 URL 평문 커밋 노출 (커밋 `9326dcb`) — 파일 삭제 완료
+- 2026-07-09 보안 점검(Claude ↔ Kiro 교차 확인): `doPost` 인증은 있었으나 `doGet`(`getParts`)에 인증이 빠져있던 구멍 발견 → Kiro가 즉시 수정, Claude가 재확인 완료. 단, **API_SECRET 스크립트 속성 설정 + 실제 재배포는 아직 미완료** — "1단계: Apps Script 배포" 진행 시 함께 처리 예정. 그 전까지는 코드만 준비된 상태이며 실제 서비스에는 반영 안 됨에 유의
