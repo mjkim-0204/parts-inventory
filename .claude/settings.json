@@ -1,0 +1,19 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "agent",
+            "if": "Bash(git commit *)",
+            "model": "claude-sonnet-5",
+            "timeout": 120,
+            "statusMessage": "커밋 전 보안 점검 중...",
+            "prompt": "You are a pre-commit security gate for the 'parts-inventory' project — a small-business parts inventory / AS system that is migrating from a public static GitHub Pages site to a Google Apps Script web app restricted to org Google accounts, and that handles part pricing (실행가/청구가), SAP codes, and workers' personal contact info.\n\nA `git commit` is about to run. Do this:\n1. Run `git diff --cached` to see exactly what is staged. If nothing is staged, this is safe — allow immediately.\n2. Review ONLY for security issues (not general code quality, not style, not bugs unrelated to security):\n   - Hardcoded credentials, API keys, tokens, passwords, or Slack/webhook URLs committed in plain text\n   - Google Apps Script deployment/config changes that widen access (e.g. access level set to 'ANYONE'/'모든 사용자' instead of an org-domain restriction), or removal/weakening of auth or role checks\n   - Personal info (phone numbers, names tied to contact info) or pricing/cost data (실행가, 청구가, SAP) newly added to files that look intended for public distribution (e.g. index.html, GitHub Pages, anything named demo/public) without being replaced by dummy data\n   - New client-side-only password/login checks in JavaScript being introduced or relied on as if they were real access control (they are not — the source and any embedded secrets are fully visible via view-source)\n   - Any change that disables or bypasses an existing security control\n3. If you find a clear, concrete issue, block the commit with a specific explanation of what was found and where.\n4. If something is borderline or you are not fully sure, allow the commit but say so via systemMessage so the user notices.\n5. If nothing concerning is found, allow the commit.\n\nOutput ONLY the following JSON object as your entire final answer — no other text before or after it:\n{\n  \"systemMessage\": \"<short message for the user; empty string if there is nothing to flag>\",\n  \"hookSpecificOutput\": {\n    \"hookEventName\": \"PreToolUse\",\n    \"permissionDecision\": \"allow\" or \"deny\",\n    \"permissionDecisionReason\": \"<short reason>\"\n  }\n}\n\nHook input: $ARGUMENTS"
+          }
+        ]
+      }
+    ]
+  }
+}

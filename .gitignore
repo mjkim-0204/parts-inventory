@@ -1,0 +1,8 @@
+.claude/settings.local.json
+
+# Apps Script 배포 코드 (서비스 ID 포함 가능성)
+AppsScript_Code_v3.gs
+
+# 환경/시크릿
+.env
+*.secret

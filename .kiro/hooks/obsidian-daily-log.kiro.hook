@@ -1,0 +1,12 @@
+{
+  "name": "옵시디언 데일리 로그",
+  "version": "1.0.0",
+  "description": "버튼 클릭 시 오늘 작업 내용을 옵시디언 daily 메모에 정리",
+  "when": {
+    "type": "userTriggered"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "오늘 대화에서 작업한 내용을 옵시디언 daily 메모(c:\\Users\\minni\\Documents\\Obsidian Vault\\daily\\오늘날짜.md)에 정리해줘. 파일이 없으면 _templates/daily.md 형식으로 새로 만들고, 있으면 '오늘 한 것' 섹션에 추가."
+  }
+}
